@@ -1,4 +1,4 @@
-# Jordan Ellery — Portfolio Website
+# Jordan Ellery — Portfolio Website 
 
 A fast, responsive portfolio site for a Technical Content Writer & Content
 Strategist. Plain HTML/CSS/JS — no build step, no framework — so it deploys
