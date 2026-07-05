@@ -1,79 +1,274 @@
-# Jordan Ellery — Portfolio Website 
+/* =========================================================
+   THEME TOGGLE (persisted via localStorage)
+   ========================================================= */
+(function initTheme() {
+  const stored = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = stored || (prefersDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+})();
 
-A fast, responsive portfolio site for a Technical Content Writer & Content
-Strategist. Plain HTML/CSS/JS — no build step, no framework — so it deploys
-straight to GitHub Pages.
+document.addEventListener('DOMContentLoaded', () => {
+  const themeToggle = document.getElementById('themeToggle');
+  themeToggle?.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+  });
 
-## Folder structure
+  /* =======================================================
+     NAV: scroll shadow + mobile toggle
+     ======================================================= */
+  const nav = document.getElementById('nav');
+  window.addEventListener('scroll', () => {
+    nav?.classList.toggle('is-scrolled', window.scrollY > 8);
+  }, { passive: true });
 
-```
-├── index.html          Main one-page site (hero → about → work → services →
-│                        industries → skills → testimonials → blog → contact)
-├── blog.html            Full blog listing page
-├── css/
-│   └── styles.css       All styles, design tokens, dark mode
-├── js/
-│   ├── main.js           Nav, theme toggle, animations, renders data-driven
-│   │                      sections on index.html
-│   └── blog.js           Renders the full post list on blog.html
-├── data/
-│   ├── projects.json     Featured Work cards — edit this to add/change work
-│   ├── testimonials.json Testimonial cards
-│   └── blog-posts.json   Blog post index (title, excerpt, date, link to file)
-├── posts/                Markdown files for individual blog posts
-└── assets/
-    └── resume.pdf         ← add your real resume here (see below)
-```
+  const navToggle = document.getElementById('navToggle');
+  const navLinks = document.getElementById('navLinks');
+  navToggle?.addEventListener('click', () => {
+    const isOpen = navLinks.classList.toggle('is-open');
+    navToggle.setAttribute('aria-expanded', String(isOpen));
+  });
+  navLinks?.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', () => {
+      navLinks.classList.remove('is-open');
+      navToggle?.setAttribute('aria-expanded', 'false');
+    });
+  });
 
-## Customizing content
+  /* =======================================================
+     SCROLL REVEAL
+     ======================================================= */
+  const revealEls = document.querySelectorAll('.reveal');
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    revealEls.forEach(el => io.observe(el));
+  } else {
+    revealEls.forEach(el => el.classList.add('is-visible'));
+  }
 
-**You do not need to touch the HTML for routine updates.** Edit the JSON
-files in `/data`:
+  /* =======================================================
+     ICONS
+     ======================================================= */
+  if (window.lucide) lucide.createIcons();
 
-- `data/projects.json` — add a new object to the array to add a new
-  portfolio piece. `gradient` accepts `grad-1` through `grad-6` (defined in
-  `styles.css`) or add your own class for the cover treatment.
-- `data/testimonials.json` — add/remove testimonial cards.
-- `data/blog-posts.json` — add a new object here, plus a matching Markdown
-  file in `/posts`, to publish a new article. `slug` should point at the
-  file path (e.g. `posts/my-new-post.md`).
+  /* =======================================================
+     FOOTER YEAR
+     ======================================================= */
+  const yearEl = document.getElementById('year');
+  if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-Services, industries, and skills are defined directly in `js/main.js`
-(`renderServices`, `renderIndustries`, `renderSkills`) since they change
-rarely — edit the arrays near the top of each function.
+  /* =======================================================
+     CONTACT FORM (front-end demo only)
+     ======================================================= */
+  const form = document.getElementById('contactForm');
+  const success = document.getElementById('formSuccess');
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    success?.classList.add('is-visible');
+    form.reset();
+  });
 
-## Adding your resume
+  /* =======================================================
+     DATA-DRIVEN SECTIONS
+     ======================================================= */
+  loadWork();
+  renderServices();
+  renderIndustries();
+  renderSkills();
+  loadTestimonials();
+  loadBlogPreview();
+});
 
-Drop your real resume PDF at `assets/resume.pdf` (replace the placeholder).
-The "Download Resume" button in the hero already points there.
+/* ---------------------------------------------------------
+   FEATURED WORK — from data/projects.json
+   --------------------------------------------------------- */
+async function loadWork() {
+  const grid = document.getElementById('workGrid');
+  if (!grid) return;
+  try {
+    const res = await fetch('data/projects.json');
+    const projects = await res.json();
+    grid.innerHTML = projects.map((p, i) => `
+      <article class="work-card reveal${i === 0 ? ' is-featured' : ''}">
+        <div class="work-cover ${p.gradient}">
+          <span class="work-type">${escapeHtml(p.type)}</span>
+        </div>
+        <div class="work-body">
+          <h3>${escapeHtml(p.title)}</h3>
+          <p>${escapeHtml(p.description)}</p>
+          <div class="tag-row">
+            <span class="tag tag-industry">${escapeHtml(p.industry)}</span>
+            ${p.skills.map(s => `<span class="tag">${escapeHtml(s)}</span>`).join('')}
+          </div>
+          <a href="${p.link}" class="work-link">Read Article
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </article>
+    `).join('');
+    observeNew(grid.querySelectorAll('.reveal'));
+  } catch (err) {
+    grid.innerHTML = `<p style="color:var(--ink-soft)">Work couldn't be loaded right now.</p>`;
+    console.error('Failed to load projects.json', err);
+  }
+}
 
-## Wiring up the contact form
+/* ---------------------------------------------------------
+   SERVICES — static list, rendered for consistency
+   --------------------------------------------------------- */
+function renderServices() {
+  const grid = document.getElementById('servicesGrid');
+  if (!grid) return;
+  const services = [
+    { title: 'Technical Writing', desc: 'Clear, accurate writing on complex products for technical and non-technical readers alike.', icon: 'file-text' },
+    { title: 'Ghostwriting', desc: "Posts, essays, and threads that sound like you, at your most articulate.", icon: 'feather' },
+    { title: 'Blog Writing', desc: 'SEO-aware articles that bring in the right readers and keep them there.', icon: 'edit-3' },
+    { title: 'Content Strategy', desc: "A plan for what to write, for whom, and why — not just more content.", icon: 'compass' },
+    { title: 'SEO Content', desc: 'Writing built to rank and convert, without reading like it was built to rank.', icon: 'search' },
+    { title: 'Startup Storytelling', desc: 'Origin stories, positioning, and narrative for teams raising or launching.', icon: 'rocket' },
+    { title: 'Newsletter Writing', desc: 'Consistent, readable newsletters that people actually open.', icon: 'mail' },
+    { title: 'Documentation', desc: 'Developer docs and technical guides that reduce support load.', icon: 'book-open' },
+    { title: 'Website Copy', desc: 'Homepage, product, and landing page copy that says what you do, plainly.', icon: 'layout' },
+  ];
+  grid.innerHTML = services.map(s => `
+    <div class="service-card">
+      <div class="icon-wrap"><i data-lucide="${s.icon}"></i></div>
+      <h3>${s.title}</h3>
+      <p>${s.desc}</p>
+    </div>
+  `).join('');
+  if (window.lucide) lucide.createIcons();
+}
 
-The form on the Contact section is front-end only — it shows a success
-message but doesn't send anything anywhere yet. To make it functional
-without a backend, the fastest options are:
+/* ---------------------------------------------------------
+   INDUSTRIES
+   --------------------------------------------------------- */
+function renderIndustries() {
+  const row = document.getElementById('industryRow');
+  if (!row) return;
+  const industries = [
+    { name: 'Artificial Intelligence', icon: 'brain-circuit' },
+    { name: 'Web3', icon: 'link-2' },
+    { name: 'Blockchain', icon: 'boxes' },
+    { name: 'SaaS', icon: 'layers' },
+    { name: 'Fintech', icon: 'landmark' },
+    { name: 'Venture Capital', icon: 'trending-up' },
+    { name: 'Startups', icon: 'rocket' },
+    { name: 'Business', icon: 'briefcase' },
+    { name: 'Emerging Technology', icon: 'sparkles' },
+  ];
+  row.innerHTML = industries.map(i => `
+    <span class="industry-chip"><i data-lucide="${i.icon}"></i>${i.name}</span>
+  `).join('');
+  if (window.lucide) lucide.createIcons();
+}
 
-- **Formspree** (formspree.io) — free tier, add `action="https://formspree.io/f/YOUR_ID"` and `method="POST"` to the `<form id="contactForm">` tag in `index.html`, and remove/adjust the `preventDefault()` call in `js/main.js`.
-- **Netlify Forms** — if you deploy on Netlify instead of GitHub Pages, just add `data-netlify="true"` to the form tag and Netlify handles the rest automatically.
+/* ---------------------------------------------------------
+   SKILLS
+   --------------------------------------------------------- */
+function renderSkills() {
+  const row = document.getElementById('skillRow');
+  if (!row) return;
+  const skills = [
+    'Technical Writing', 'SEO', 'Research', 'Storytelling', 'Content Strategy',
+    'Editing', 'Copywriting', 'Markdown', 'GitHub', 'Notion',
+    'Google Docs', 'WordPress', 'Figma', 'ChatGPT'
+  ];
+  row.innerHTML = skills.map(s => `<span class="skill-badge">${s}</span>`).join('');
+}
 
-## Deploying to GitHub Pages
+/* ---------------------------------------------------------
+   TESTIMONIALS — from data/testimonials.json
+   --------------------------------------------------------- */
+async function loadTestimonials() {
+  const grid = document.getElementById('testimonialGrid');
+  if (!grid) return;
+  try {
+    const res = await fetch('data/testimonials.json');
+    const items = await res.json();
+    grid.innerHTML = items.map(t => `
+      <div class="testimonial-card reveal">
+        <div class="quote-mark">&ldquo;</div>
+        <p class="quote">${escapeHtml(t.quote)}</p>
+        <div class="testimonial-person">
+          <div class="avatar">${escapeHtml(t.initials)}</div>
+          <div>
+            <div class="name">${escapeHtml(t.name)}</div>
+            <div class="context">${escapeHtml(t.context)}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    observeNew(grid.querySelectorAll('.reveal'));
+  } catch (err) {
+    grid.innerHTML = `<p style="color:var(--ink-soft)">Testimonials couldn't be loaded right now.</p>`;
+    console.error('Failed to load testimonials.json', err);
+  }
+}
 
-1. Push this folder to a GitHub repository (e.g. `your-username/portfolio`).
-2. In the repo, go to **Settings → Pages**.
-3. Under "Build and deployment", set **Source** to `Deploy from a branch`,
-   branch `main`, folder `/ (root)`.
-4. Save. Your site will be live at `https://your-username.github.io/portfolio/`
-   within a minute or two.
-5. Optional: add a custom domain under the same Pages settings.
+/* ---------------------------------------------------------
+   BLOG PREVIEW (homepage) — from data/blog-posts.json
+   --------------------------------------------------------- */
+async function loadBlogPreview() {
+  const list = document.getElementById('blogList');
+  if (!list) return;
+  try {
+    const res = await fetch('data/blog-posts.json');
+    const posts = await res.json();
+    const preview = posts.slice(0, 4);
+    list.innerHTML = preview.map(p => `
+      <a href="blog.html" class="blog-item reveal">
+        <span class="blog-meta">${escapeHtml(p.tag)} · ${formatDate(p.date)}</span>
+        <h3>${escapeHtml(p.title)}</h3>
+        <p>${escapeHtml(p.excerpt)}</p>
+        <span class="read-time">${escapeHtml(p.readTime)}</span>
+      </a>
+    `).join('');
+    observeNew(list.querySelectorAll('.reveal'));
+  } catch (err) {
+    list.innerHTML = `<p style="color:var(--ink-soft)">Posts couldn't be loaded right now.</p>`;
+    console.error('Failed to load blog-posts.json', err);
+  }
+}
 
-## Notes
+/* ---------------------------------------------------------
+   HELPERS
+   --------------------------------------------------------- */
+function escapeHtml(str = '') {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
 
-- Dark mode preference is saved in the visitor's browser (`localStorage`) and
-  also respects their OS-level preference on first visit.
-- Featured Work cover images are CSS gradients rather than photos, so there's
-  nothing to source, license, or optimize — swap in real screenshots later by
-  editing `.work-cover` in `styles.css` and adding an `<img>` per card if
-  preferred.
-- Icons are from [Lucide](https://lucide.dev), loaded via CDN.
-- Fonts are Inter, Space Grotesk, and JetBrains Mono, loaded via Google
-  Fonts.
+function formatDate(iso) {
+  try {
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  } catch { return iso; }
+}
+
+// Re-observe elements injected after the initial DOMContentLoaded reveal setup
+function observeNew(elements) {
+  if (!('IntersectionObserver' in window)) {
+    elements.forEach(el => el.classList.add('is-visible'));
+    return;
+  }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  elements.forEach(el => io.observe(el));
+}
